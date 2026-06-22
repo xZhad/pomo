@@ -10,6 +10,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/harmonica"
 	"github.com/xZhad/pomo/internal/model"
+	"github.com/xZhad/pomo/internal/report"
 	"github.com/xZhad/pomo/internal/session"
 )
 
@@ -152,10 +153,31 @@ func (m *Model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.input, cmd = m.input.Update(msg)
 		return m, cmd
+	case modeHistory:
+		switch msg.String() {
+		case "tab", "esc":
+			m.mode = modeTimer
+		case "q", "ctrl+c":
+			return m, tea.Quit
+		case "j", "down":
+			if m.histCursor < len(m.history)-1 {
+				m.histCursor++
+			}
+		case "k", "up":
+			if m.histCursor > 0 {
+				m.histCursor--
+			}
+		}
+		return m, nil
 	default: // modeTimer
 		switch msg.String() {
 		case "q", "ctrl+c":
 			return m, tea.Quit
+		case "tab":
+			m.history, _ = report.Log(m.svc.Store, "")
+			m.histCursor = 0
+			m.mode = modeHistory
+			return m, nil
 		case "p", " ":
 			if m.status.Paused {
 				_ = m.svc.Resume()
@@ -197,6 +219,20 @@ func (m *Model) View() tea.View {
 		body = fmt.Sprintf("🍅 pomo\n\nstart a session:\n%s\n\n(enter to start · ctrl+c quit)", m.input.View())
 	case modeNote:
 		body = fmt.Sprintf("🍅 pomo — note\n\n%s\n\n(enter to save · esc cancel)", m.input.View())
+	case modeHistory:
+		var b string
+		b = "🍅 pomo — history (tab back · j/k · q quit)\n\n"
+		for i, s := range m.history {
+			cur := "  "
+			if i == m.histCursor {
+				cur = "> "
+			}
+			b += fmt.Sprintf("%s%s  %-20s  %dm\n", cur, s.Started.Format("01-02 15:04"), s.Topic, s.Duration/60)
+		}
+		if len(m.history) == 0 {
+			b += "(no sessions yet)"
+		}
+		body = b
 	default:
 		s := m.status
 		tomato := "🍅"

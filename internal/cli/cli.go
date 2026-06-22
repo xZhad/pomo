@@ -13,12 +13,21 @@ import (
 	"github.com/xZhad/pomo/internal/report"
 	"github.com/xZhad/pomo/internal/session"
 	"github.com/xZhad/pomo/internal/store"
+	"github.com/xZhad/pomo/internal/tui"
 )
 
 func Run(args []string, out io.Writer) int {
-	if len(args) == 0 {
-		fmt.Fprintln(out, usage)
-		return 2
+	if len(args) == 0 || args[0] == "tui" {
+		st, err := store.Open()
+		if err != nil {
+			fmt.Fprintln(out, "error:", err)
+			return 1
+		}
+		if err := tui.Run(session.New(st)); err != nil {
+			fmt.Fprintln(out, "error:", err)
+			return 1
+		}
+		return 0
 	}
 	st, err := store.Open()
 	if err != nil {

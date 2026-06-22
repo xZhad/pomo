@@ -136,3 +136,29 @@ func mustUpdate(m *Model, msg tea.Msg) (*Model, tea.Cmd) {
 	mi, cmd := m.Update(msg)
 	return mi.(*Model), cmd
 }
+
+func TestTUIHistoryPane(t *testing.T) {
+	m, _, clk := newModel(t)
+	// finish one session so history has content
+	m = typeText(m, "ml")
+	m, _ = mustUpdate(m, keyPress("enter"))
+	clk.now = clk.now.Add(time.Minute)
+	m, _ = mustUpdate(m, keyPress("d")) // back to modeTopic
+	// from timer/topic, tab into history
+	m.mode = modeTimer
+	m, _ = mustUpdate(m, tea.KeyPressMsg{Code: tea.KeyTab})
+	if m.mode != modeHistory {
+		t.Fatalf("tab -> mode %v, want modeHistory", m.mode)
+	}
+	if len(m.history) != 1 || m.history[0].Topic != "ml" {
+		t.Errorf("history not loaded: %+v", m.history)
+	}
+	if out := m.View().Content; !strings.Contains(out, "ml") {
+		t.Errorf("history view missing session: %q", out)
+	}
+	// tab back
+	m, _ = mustUpdate(m, tea.KeyPressMsg{Code: tea.KeyTab})
+	if m.mode != modeTimer {
+		t.Errorf("tab back -> mode %v, want modeTimer", m.mode)
+	}
+}
