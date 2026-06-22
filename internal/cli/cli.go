@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/xZhad/pomo/internal/daemon"
@@ -23,7 +24,11 @@ func Run(args []string, out io.Writer) int {
 			fmt.Fprintln(out, "error:", err)
 			return 1
 		}
-		if err := tui.Run(session.New(st)); err != nil {
+		svcTUI := session.New(st)
+		if cfg, err := st.LoadConfig(); err == nil && !cfg.Notify {
+			svcTUI.Notifier = notify.Noop{}
+		}
+		if err := tui.Run(svcTUI); err != nil {
 			fmt.Fprintln(out, "error:", err)
 			return 1
 		}
@@ -75,7 +80,11 @@ func Run(args []string, out io.Writer) int {
 		if len(rest) == 0 {
 			return 2
 		}
-		_ = daemon.Watch(st, notify.Beep{}, rest[0], time.Now, time.Second, 0)
+		var wn notify.Notifier = notify.Beep{}
+		if cfg, err := st.LoadConfig(); err == nil && !cfg.Notify {
+			wn = notify.Noop{}
+		}
+		_ = daemon.Watch(st, wn, rest[0], time.Now, time.Second, 0)
 		return 0
 	default:
 		fmt.Fprintln(out, usage)
@@ -94,16 +103,7 @@ func wrap(out io.Writer, err error) int {
 	return 0
 }
 
-func joinArgs(a []string) string {
-	s := ""
-	for i, x := range a {
-		if i > 0 {
-			s += " "
-		}
-		s += x
-	}
-	return s
-}
+func joinArgs(a []string) string { return strings.Join(a, " ") }
 
 func cmdStart(svc *session.Service, args []string, out io.Writer) int {
 	var topic string
@@ -220,6 +220,13 @@ func cmdReportFlag(st *store.Store, args []string, out io.Writer) int {
 			by = args[i+1]
 			i++
 		}
+	}
+	switch by {
+	case "topic", "day", "tag":
+		// valid
+	default:
+		fmt.Fprintf(out, "error: unknown --by value %q (want: topic, day, tag)\n", by)
+		return 2
 	}
 	return cmdReport(st, by, out)
 }

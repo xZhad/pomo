@@ -78,8 +78,8 @@ func TestTUITickAnimatesAndNotifies(t *testing.T) {
 	clk.now = clk.now.Add(10 * time.Minute)
 	mi, _ = m.Update(tickMsg(clk.now))
 	m = mi.(*Model)
-	if got := m.bar.Percent(); got > 0.45 { // SetPercent animates toward target; just sanity
-		_ = got
+	if got := m.bar.Percent(); got < 0 || got > 1 {
+		t.Errorf("bar percent out of range [0,1]: %v", got)
 	}
 	// past deadline: notify fires once
 	clk.now = clk.now.Add(20 * time.Minute)

@@ -43,7 +43,7 @@ func (svc *Service) Start(opts StartOpts) (model.Session, error) {
 		}
 		workMin = cfg.WorkMin
 	}
-	now := svc.Now().UTC()
+	now := svc.Now()
 	sess := model.Session{
 		ID:       svc.IDGen(),
 		Topic:    opts.Topic,
@@ -73,7 +73,7 @@ func (svc *Service) Status() (Status, error) {
 	if err != nil || !ok {
 		return Status{Active: false}, err
 	}
-	ref := svc.Now().UTC()
+	ref := svc.Now()
 	if st.Paused {
 		ref = st.PausedAt
 	}
@@ -111,7 +111,7 @@ func (svc *Service) Note(text string) error {
 	if err != nil {
 		return err
 	}
-	at := svc.Now().UTC()
+	at := svc.Now()
 	n, err := svc.Store.UpdateSession(id, func(s model.Session) model.Session {
 		s.Notes = append(s.Notes, model.Note{At: at, Text: text})
 		return s
@@ -130,7 +130,7 @@ func (svc *Service) finish(completed bool) (model.Session, error) {
 	if err != nil {
 		return model.Session{}, err
 	}
-	end := svc.Now().UTC()
+	end := svc.Now()
 	if _, err := svc.Store.UpdateSession(id, func(s model.Session) model.Session {
 		s.Ended = &end
 		s.Completed = completed
@@ -168,7 +168,7 @@ func (svc *Service) Pause() error {
 		return errors.New("already paused")
 	}
 	st.Paused = true
-	st.PausedAt = svc.Now().UTC()
+	st.PausedAt = svc.Now()
 	return svc.Store.SaveState(st)
 }
 
@@ -183,7 +183,7 @@ func (svc *Service) Resume() error {
 	if !st.Paused {
 		return errors.New("not paused")
 	}
-	st.Deadline = st.Deadline.Add(svc.Now().UTC().Sub(st.PausedAt))
+	st.Deadline = st.Deadline.Add(svc.Now().Sub(st.PausedAt))
 	st.Paused = false
 	st.PausedAt = time.Time{}
 	return svc.Store.SaveState(st)

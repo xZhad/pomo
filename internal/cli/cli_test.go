@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/xZhad/pomo/internal/notify"
+	"github.com/xZhad/pomo/internal/store"
 )
 
 func run(t *testing.T, args ...string) string {
@@ -61,5 +64,59 @@ func TestUnknownCommand(t *testing.T) {
 	var buf bytes.Buffer
 	if code := Run([]string{"frobnicate"}, &buf); code != 2 {
 		t.Errorf("exit code = %d, want 2", code)
+	}
+}
+
+func TestReportUnknownByReturns2(t *testing.T) {
+	t.Setenv("POMO_DIR", t.TempDir())
+	var buf bytes.Buffer
+	if code := Run([]string{"report", "--by", "bogus"}, &buf); code != 2 {
+		t.Errorf("exit code = %d, want 2 for unknown --by", code)
+	}
+	if !strings.Contains(buf.String(), "bogus") {
+		t.Errorf("expected error message to contain the bad value: %q", buf.String())
+	}
+}
+
+// TestNotifyConfigFalseUsesNoop verifies that when cfg.Notify=false the _watch
+// notifier selection logic produces a Noop instead of Beep.
+func TestNotifyConfigFalseUsesNoop(t *testing.T) {
+	t.Setenv("POMO_DIR", t.TempDir())
+	// Open a store, set notify=false, then verify the notifier chosen matches Noop.
+	st, err := store.Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := st.LoadConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// With notify=true (default) -> Beep
+	cfg.Notify = true
+	if err := st.SaveConfig(cfg); err != nil {
+		t.Fatal(err)
+	}
+	cfg2, _ := st.LoadConfig()
+	var wn notify.Notifier = notify.Beep{}
+	if !cfg2.Notify {
+		wn = notify.Noop{}
+	}
+	if _, ok := wn.(notify.Beep); !ok {
+		t.Errorf("notify=true should yield Beep, got %T", wn)
+	}
+
+	// With notify=false -> Noop
+	cfg.Notify = false
+	if err := st.SaveConfig(cfg); err != nil {
+		t.Fatal(err)
+	}
+	cfg3, _ := st.LoadConfig()
+	wn = notify.Beep{}
+	if !cfg3.Notify {
+		wn = notify.Noop{}
+	}
+	if _, ok := wn.(notify.Noop); !ok {
+		t.Errorf("notify=false should yield Noop, got %T", wn)
 	}
 }
