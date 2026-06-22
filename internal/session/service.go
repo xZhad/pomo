@@ -94,3 +94,64 @@ func (svc *Service) Status() (Status, error) {
 	}
 	return out, nil
 }
+
+func (svc *Service) activeID() (string, error) {
+	st, ok, err := svc.Store.LoadState()
+	if err != nil {
+		return "", err
+	}
+	if !ok {
+		return "", ErrNoActive
+	}
+	return st.ID, nil
+}
+
+func (svc *Service) Note(text string) error {
+	id, err := svc.activeID()
+	if err != nil {
+		return err
+	}
+	at := svc.Now().UTC()
+	n, err := svc.Store.UpdateSession(id, func(s model.Session) model.Session {
+		s.Notes = append(s.Notes, model.Note{At: at, Text: text})
+		return s
+	})
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrNoActive
+	}
+	return nil
+}
+
+func (svc *Service) finish(completed bool) (model.Session, error) {
+	id, err := svc.activeID()
+	if err != nil {
+		return model.Session{}, err
+	}
+	end := svc.Now().UTC()
+	if _, err := svc.Store.UpdateSession(id, func(s model.Session) model.Session {
+		s.Ended = &end
+		s.Completed = completed
+		return s
+	}); err != nil {
+		return model.Session{}, err
+	}
+	if err := svc.Store.ClearState(); err != nil {
+		return model.Session{}, err
+	}
+	all, err := svc.Store.AllSessions()
+	if err != nil {
+		return model.Session{}, err
+	}
+	for _, s := range all {
+		if s.ID == id {
+			return s, nil
+		}
+	}
+	return model.Session{}, nil
+}
+
+func (svc *Service) Done() (model.Session, error) { return svc.finish(true) }
+func (svc *Service) Stop() (model.Session, error) { return svc.finish(false) }
