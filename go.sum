@@ -1,2 +1,5 @@
+github.com/oklog/ulid/v2 v2.1.1 h1:suPZ4ARWLOJLegGFiZZ1dFAkqzhMjL3J1TzI+5wHz8s=
+github.com/oklog/ulid/v2 v2.1.1/go.mod h1:rcEKHmBBKfef9DhnvX7y1HZBYxjXb0cP5ExxNsTT1QQ=
+github.com/pborman/getopt v0.0.0-20170112200414-7148bc3a4c30/go.mod h1:85jBQOZwpVEaDAr341tbn15RS4fCAsIst0qp7i8ex1o=
 github.com/xZhad/jsonldb v0.0.0-20260622183548-723aad25f23f h1:MWmip6+neiqGzkN8hIkFo3gcvoOM/oG2YGLorsQfYEA=
 github.com/xZhad/jsonldb v0.0.0-20260622183548-723aad25f23f/go.mod h1:5hM5JvcMyc5phZtqYlFHbwCTwubcI2i53yBr57/rl5E=
