@@ -103,3 +103,37 @@ func TestNoteDoneStop(t *testing.T) {
 		t.Error("state not cleared after Stop")
 	}
 }
+
+func TestPauseResumeExtend(t *testing.T) {
+	svc := newSvc(t)
+	base := time.Date(2026, 6, 8, 18, 30, 0, 0, time.UTC)
+	svc.Now = func() time.Time { return base }
+	svc.Start(StartOpts{Topic: "ml", WorkMin: 25}) // deadline base+25m
+
+	// pause at +10m -> remaining frozen at 15m
+	svc.Now = func() time.Time { return base.Add(10 * time.Minute) }
+	if err := svc.Pause(); err != nil {
+		t.Fatal(err)
+	}
+	svc.Now = func() time.Time { return base.Add(20 * time.Minute) } // 10m paused
+	if st, _ := svc.Status(); st.Remaining != 15*time.Minute || !st.Paused {
+		t.Errorf("paused status = %+v, want 15m & paused", st)
+	}
+	// resume at +20m -> deadline shifts by 10m to base+35m
+	if err := svc.Resume(); err != nil {
+		t.Fatal(err)
+	}
+	if st, _ := svc.Status(); st.Remaining != 15*time.Minute || st.Paused {
+		t.Errorf("resumed status = %+v, want 15m & not paused", st)
+	}
+	// extend +5m -> remaining 20m, session duration grows
+	if err := svc.Extend(5 * time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	if st, _ := svc.Status(); st.Remaining != 20*time.Minute {
+		t.Errorf("extended remaining = %v, want 20m", st.Remaining)
+	}
+	if st, _ := svc.Status(); st.Session.Duration != 1500+300 {
+		t.Errorf("duration after extend = %d, want 1800", st.Session.Duration)
+	}
+}

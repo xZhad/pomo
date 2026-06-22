@@ -155,3 +155,55 @@ func (svc *Service) finish(completed bool) (model.Session, error) {
 
 func (svc *Service) Done() (model.Session, error) { return svc.finish(true) }
 func (svc *Service) Stop() (model.Session, error) { return svc.finish(false) }
+
+func (svc *Service) Pause() error {
+	st, ok, err := svc.Store.LoadState()
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrNoActive
+	}
+	if st.Paused {
+		return errors.New("already paused")
+	}
+	st.Paused = true
+	st.PausedAt = svc.Now().UTC()
+	return svc.Store.SaveState(st)
+}
+
+func (svc *Service) Resume() error {
+	st, ok, err := svc.Store.LoadState()
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrNoActive
+	}
+	if !st.Paused {
+		return errors.New("not paused")
+	}
+	st.Deadline = st.Deadline.Add(svc.Now().UTC().Sub(st.PausedAt))
+	st.Paused = false
+	st.PausedAt = time.Time{}
+	return svc.Store.SaveState(st)
+}
+
+func (svc *Service) Extend(d time.Duration) error {
+	st, ok, err := svc.Store.LoadState()
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrNoActive
+	}
+	st.Deadline = st.Deadline.Add(d)
+	if err := svc.Store.SaveState(st); err != nil {
+		return err
+	}
+	_, err = svc.Store.UpdateSession(st.ID, func(s model.Session) model.Session {
+		s.Duration += int(d.Seconds())
+		return s
+	})
+	return err
+}
