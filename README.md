@@ -8,11 +8,19 @@ Built on [jsonldb](https://github.com/xZhad/jsonldb) for storage (and its query/
 
 ## Install
 
+Homebrew:
+
+```sh
+brew install xZhad/tap/pomo
+```
+
+Or with Go (requires Go 1.26+):
+
 ```sh
 go install github.com/xZhad/pomo@latest
 ```
 
-Requires Go 1.26+. macOS/Linux (the background watcher uses `setsid`).
+macOS/Linux (the background watcher uses `setsid`).
 
 ---
 

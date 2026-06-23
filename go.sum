@@ -71,8 +71,8 @@ github.com/stretchr/testify v1.8.4 h1:CcVxjf3Q8PM0mHUKJCdn+eZZtm5yQwehR5yeSVQQcU
 github.com/stretchr/testify v1.8.4/go.mod h1:sz/lmYIOXD/1dqDmKjjqLyZ2RngseejIcXlSw2iwfAo=
 github.com/tadvi/systray v0.0.0-20190226123456-11a2b8fa57af h1:6yITBqGTE2lEeTPG04SN9W+iWHCRyHqlVYILiSXziwk=
 github.com/tadvi/systray v0.0.0-20190226123456-11a2b8fa57af/go.mod h1:4F09kP5F+am0jAwlQLddpoMDM+iewkxxt6nxUQ5nq5o=
-github.com/xZhad/jsonldb v0.0.0-20260622183548-723aad25f23f h1:MWmip6+neiqGzkN8hIkFo3gcvoOM/oG2YGLorsQfYEA=
-github.com/xZhad/jsonldb v0.0.0-20260622183548-723aad25f23f/go.mod h1:5hM5JvcMyc5phZtqYlFHbwCTwubcI2i53yBr57/rl5E=
+github.com/xZhad/jsonldb v0.1.0 h1:w8NV9VdyTpzRbbsb/lA7PRJwCe9uxwyhv6qv0fz/S+o=
+github.com/xZhad/jsonldb v0.1.0/go.mod h1:5hM5JvcMyc5phZtqYlFHbwCTwubcI2i53yBr57/rl5E=
 github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e h1:JVG44RsyaB9T2KIHavMF/ppJZNG9ZpyihvCd0w101no=
 github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e/go.mod h1:RbqR21r5mrJuqunuUZ/Dhy/avygyECGrLceyNeo4LiM=
 golang.org/x/exp v0.0.0-20231006140011-7918f672742d h1:jtJma62tbqLibJ5sFQz8bKtEM8rJBtfilJ2qTU199MI=

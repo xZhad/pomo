@@ -1,0 +1,67 @@
+version: 2
+
+project_name: pomo
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: pomo
+    main: .
+    binary: pomo
+    env:
+      - CGO_ENABLED=0
+    # darwin + linux only: the daemon watcher uses syscall.Setsid (no Windows)
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+
+archives:
+  - id: default
+    formats:
+      - tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+
+release:
+  github:
+    owner: xZhad
+    name: pomo
+
+homebrew_casks:
+  - name: pomo
+    binaries:
+      - pomo
+    repository:
+      owner: xZhad
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Casks
+    homepage: "https://github.com/xZhad/pomo"
+    description: "Terminal pomodoro timer with session logging, notes, and an animated TUI"
+    # strip the Gatekeeper quarantine bit (binaries are unsigned)
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/pomo"]
+          end
