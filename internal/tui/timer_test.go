@@ -162,3 +162,10 @@ func TestTUIHistoryPane(t *testing.T) {
 		t.Errorf("tab back -> mode %v, want modeTimer", m.mode)
 	}
 }
+
+func TestViewAltScreen(t *testing.T) {
+	m, _, _ := newModel(t)
+	if !m.View().AltScreen {
+		t.Error("View().AltScreen must be true (full-screen TUI)")
+	}
+}

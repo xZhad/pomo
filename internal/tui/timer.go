@@ -251,5 +251,7 @@ func (m *Model) View() tea.View {
 			tomato, s.Session.Topic, mm, ss, state, m.bar.View())
 	}
 	card := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(1, 3).Render(body)
-	return tea.NewView(card)
+	v := tea.NewView(card)
+	v.AltScreen = true // full-screen (v2: alt-screen is a View field, not a program option)
+	return v
 }
