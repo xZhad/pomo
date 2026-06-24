@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/xZhad/pomo/internal/daemon"
+	"github.com/xZhad/pomo/internal/gamify"
 	"github.com/xZhad/pomo/internal/model"
 	"github.com/xZhad/pomo/internal/notify"
 	"github.com/xZhad/pomo/internal/report"
@@ -68,6 +69,8 @@ func Run(args []string, out io.Writer) int {
 		return cmdLast(st, out)
 	case "log", "history":
 		return cmdLog(st, rest, out)
+	case "stats", "dash", "dashboard":
+		return cmdStats(svc, out)
 	case "topics":
 		return cmdReport(st, "topic", out)
 	case "report":
@@ -92,7 +95,7 @@ func Run(args []string, out io.Writer) int {
 	}
 }
 
-const usage = "usage: pomo <start|status|note|done|stop|pause|resume|extend|last|log|topics|report|rm|config>"
+const usage = "usage: pomo <start|status|note|done|stop|pause|resume|extend|last|log|stats|topics|report|rm|config>"
 
 func wrap(out io.Writer, err error) int {
 	if err != nil {
@@ -182,6 +185,48 @@ func finish(out io.Writer, fn func() (model.Session, error), label string) int {
 	fmt.Fprintf(out, "%s: %s\n", label, sess.Topic)
 	if label == "done" && sess.XP > 0 {
 		fmt.Fprintf(out, "  +%d XP 🍅\n", sess.XP)
+	}
+	return 0
+}
+
+func cmdStats(svc *session.Service, out io.Writer) int {
+	all, err := svc.Store.AllSessions()
+	if err != nil {
+		fmt.Fprintln(out, "error:", err)
+		return 1
+	}
+	cfg, _ := svc.Store.LoadConfig()
+	s := gamify.Compute(all, svc.Now(), cfg.Goal)
+	fmt.Fprintf(out, "🍅 pomo stats\n")
+	fmt.Fprintf(out, "level %d  (%d/%d XP)   🔥 %d-day streak   %d/%d today   goal\n",
+		s.Level, s.IntoLevel, s.LevelSpan, s.Streak, s.Today, s.Goal)
+	fmt.Fprintf(out, "%dh%02dm focused · %d sessions\n", s.TotalMinutes/60, s.TotalMinutes%60, s.TotalSessions)
+	fmt.Fprintf(out, "\nlast 7 days:\n")
+	for i := 0; i < 7; i++ {
+		fmt.Fprintf(out, "  %s %s %d\n", s.WeekLabels[i], strings.Repeat("█", s.Week[i]), s.Week[i])
+	}
+	if len(s.TopTopics) > 0 {
+		fmt.Fprintf(out, "\ntop topics:\n")
+		for _, t := range s.TopTopics {
+			fmt.Fprintf(out, "  %-14s %d\n", t.Topic, t.Count)
+		}
+	}
+	if s.BestCount > 0 {
+		fmt.Fprintf(out, "\n★ best day %s (%d)\n", s.BestDay, s.BestCount)
+	}
+	earned := 0
+	for _, b := range s.Badges {
+		if b.Earned {
+			earned++
+		}
+	}
+	fmt.Fprintf(out, "\nbadges (%d/%d):\n", earned, len(s.Badges))
+	for _, b := range s.Badges {
+		mark := "🔒"
+		if b.Earned {
+			mark = b.Icon
+		}
+		fmt.Fprintf(out, "  %s %-14s %s\n", mark, b.Name, b.Desc)
 	}
 	return 0
 }

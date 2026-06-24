@@ -2,15 +2,15 @@ module github.com/xZhad/pomo
 
 go 1.26.4
 
-require github.com/xZhad/jsonldb v0.2.2
-
 require (
 	charm.land/bubbles/v2 v2.1.0
 	charm.land/bubbletea/v2 v2.0.7
 	charm.land/lipgloss/v2 v2.0.4
+	github.com/NimbleMarkets/ntcharts/v2 v2.2.0
 	github.com/charmbracelet/harmonica v0.2.0
 	github.com/gen2brain/beeep v0.11.2
 	github.com/oklog/ulid/v2 v2.1.1
+	github.com/xZhad/jsonldb v0.2.2
 )
 
 require (
@@ -28,6 +28,7 @@ require (
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
 	github.com/jackmordaunt/icns/v3 v3.0.1 // indirect
+	github.com/lrstanley/bubblezone/v2 v2.0.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.4.0 // indirect
 	github.com/mattn/go-runewidth v0.0.23 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect

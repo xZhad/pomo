@@ -83,6 +83,19 @@ func gradientText(s string, frame int) string {
 	return b.String()
 }
 
+// gradientRule draws a w-wide horizontal rule with a static synthwave ramp.
+func gradientRule(w int) string {
+	if w <= 0 {
+		return ""
+	}
+	ramp := lipgloss.Blend1D(w, cMagenta, cViolet, cCyan)
+	var b strings.Builder
+	for i := 0; i < w; i++ {
+		b.WriteString(lipgloss.NewStyle().Foreground(ramp[i]).Render("─"))
+	}
+	return b.String()
+}
+
 // keyHint renders "key desc" pairs for footers.
 func keyHint(key, desc string) string {
 	return styleKey.Render(key) + styleMuted.Render(" "+desc+"  ")

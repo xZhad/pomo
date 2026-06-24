@@ -144,11 +144,15 @@ func TestTUIHistoryPane(t *testing.T) {
 	m, _ = mustUpdate(m, keyPress("enter"))
 	clk.now = clk.now.Add(time.Minute)
 	m, _ = mustUpdate(m, keyPress("d")) // back to modeTopic
-	// from timer/topic, tab into history
+	// tab cycle: timer → stats → history → timer
 	m.mode = modeTimer
 	m, _ = mustUpdate(m, tea.KeyPressMsg{Code: tea.KeyTab})
+	if m.mode != modeStats {
+		t.Fatalf("tab -> mode %v, want modeStats", m.mode)
+	}
+	m, _ = mustUpdate(m, tea.KeyPressMsg{Code: tea.KeyTab})
 	if m.mode != modeHistory {
-		t.Fatalf("tab -> mode %v, want modeHistory", m.mode)
+		t.Fatalf("tab tab -> mode %v, want modeHistory", m.mode)
 	}
 	if len(m.history) != 1 || m.history[0].Topic != "ml" {
 		t.Errorf("history not loaded: %+v", m.history)
@@ -156,7 +160,7 @@ func TestTUIHistoryPane(t *testing.T) {
 	if out := m.View().Content; !strings.Contains(out, "ml") {
 		t.Errorf("history view missing session: %q", out)
 	}
-	// tab back
+	// tab back to timer
 	m, _ = mustUpdate(m, tea.KeyPressMsg{Code: tea.KeyTab})
 	if m.mode != modeTimer {
 		t.Errorf("tab back -> mode %v, want modeTimer", m.mode)

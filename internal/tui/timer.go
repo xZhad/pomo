@@ -23,6 +23,7 @@ const (
 	modeTopic
 	modeNote
 	modeHistory
+	modeStats   // gamified dashboard
 	modeAdvance // between phases: focus→break or break→focus
 )
 
@@ -198,6 +199,18 @@ func (m *Model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
+	case modeStats:
+		switch msg.String() {
+		case "q", "ctrl+c":
+			return m, tea.Quit
+		case "tab":
+			m.history, _ = report.Log(m.svc.Store, "")
+			m.histCursor = 0
+			m.mode = modeHistory
+		case "esc":
+			m.mode = modeTimer
+		}
+		return m, nil
 	case modeAdvance:
 		switch msg.String() {
 		case "q", "ctrl+c":
@@ -221,9 +234,7 @@ func (m *Model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		case "q", "ctrl+c":
 			return m, tea.Quit
 		case "tab":
-			m.history, _ = report.Log(m.svc.Store, "")
-			m.histCursor = 0
-			m.mode = modeHistory
+			m.mode = modeStats
 			return m, nil
 		case "p", " ":
 			if m.status.Paused {
@@ -277,6 +288,11 @@ func (m *Model) toTopic() {
 }
 
 func (m *Model) View() tea.View {
+	if m.mode == modeStats {
+		v := tea.NewView(m.renderStats(m.w, m.h))
+		v.AltScreen = true
+		return v
+	}
 	phase := m.status.Phase
 	if phase == "" {
 		phase = "focus"
