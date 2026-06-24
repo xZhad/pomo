@@ -50,6 +50,38 @@ type Model struct {
 	frame       int    // animation frame (logo shimmer)
 	advanceKind string // "break" (after focus) | "focus" (after break)
 	advanceLong bool   // next break is a long break
+	lastXP      int    // XP from the just-completed focus (celebration)
+	lastLevelUp bool   // the last focus triggered a level-up
+	newBadge    string // a badge unlocked by the last focus ("" = none)
+}
+
+// completeFocus logs the focus as done, captures XP/level-up/badge for the
+// celebration, and transitions to the break advance screen.
+func (m *Model) completeFocus() {
+	cfg, _ := m.svc.Store.LoadConfig()
+	before := func() gamify.Stats {
+		all, _ := m.svc.Store.AllSessions()
+		return gamify.Compute(all, m.svc.Now(), cfg.Goal)
+	}
+	s0 := before()
+	sess, _ := m.svc.Done()
+	m.lastXP = sess.XP
+	s1 := before()
+	m.lastLevelUp = s1.Level > s0.Level
+	m.newBadge = ""
+	for i := range s1.Badges {
+		if i < len(s0.Badges) && s1.Badges[i].Earned && !s0.Badges[i].Earned {
+			m.newBadge = s1.Badges[i].Icon + " " + s1.Badges[i].Name
+			break
+		}
+	}
+	n, _ := m.svc.CompletedFocusToday()
+	cyc := m.cycleLength()
+	m.advanceLong = cyc > 0 && n%cyc == 0
+	m.advanceKind = "break"
+	m.notified = true
+	m.mode = modeAdvance
+	m.refresh()
 }
 
 // cycleLength returns the configured focuses-per-cycle (default 4).
@@ -122,18 +154,14 @@ func (m *Model) onTick() tea.Cmd {
 			m.notified = true
 			if m.status.Phase == "focus" {
 				_ = m.svc.Notifier.Notify("pomo", "Focus complete — break time 🍅")
-				_, _ = m.svc.Done()
-				n, _ := m.svc.CompletedFocusToday()
-				cyc := m.cycleLength()
-				m.advanceLong = cyc > 0 && n%cyc == 0
-				m.advanceKind = "break"
+				m.completeFocus()
 			} else {
 				_ = m.svc.Notifier.Notify("pomo", "Break over — back to focus 🍅")
 				_ = m.svc.EndBreak()
 				m.advanceKind = "focus"
+				m.mode = modeAdvance
+				m.refresh()
 			}
-			m.mode = modeAdvance
-			m.refresh()
 		}
 	}
 	// breathing pulse
@@ -255,14 +283,7 @@ func (m *Model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.refresh()
 		case "d": // finish this phase
 			if focus {
-				_, _ = m.svc.Done()
-				n, _ := m.svc.CompletedFocusToday()
-				cyc := m.cycleLength()
-				m.advanceLong = cyc > 0 && n%cyc == 0
-				m.advanceKind = "break"
-				m.notified = true
-				m.mode = modeAdvance
-				m.refresh()
+				m.completeFocus()
 			} else { // end break early → next focus
 				_ = m.svc.EndBreak()
 				m.toTopic()
@@ -410,23 +431,32 @@ func (m *Model) cycleDots() string {
 }
 
 func (m *Model) viewAdvance() string {
-	var head, sub string
+	rows := []string{"🍅 " + gradientText("pomo", m.frame), m.statsLine(), ""}
 	if m.advanceKind == "break" {
 		kind := "short break"
 		col := cCyan
 		if m.advanceLong {
 			kind, col = "long break", cGreen
 		}
-		head = styleOK.Render("✓  FOCUS COMPLETE")
-		sub = styleMuted.Render("↵ start ") +
-			lipgloss.NewStyle().Foreground(col).Bold(true).Render(kind) +
-			styleMuted.Render("   ·   s skip   ·   q quit")
+		rows = append(rows,
+			confetti(m.frame, 34),
+			styleOK.Render("✓  FOCUS COMPLETE"),
+			lipgloss.NewStyle().Foreground(cYellow).Bold(true).Render(fmt.Sprintf("+%d XP", m.lastXP)))
+		if m.lastLevelUp {
+			rows = append(rows, lipgloss.NewStyle().Foreground(cMagenta).Bold(true).Render("⬆  LEVEL UP!"))
+		}
+		if m.newBadge != "" {
+			rows = append(rows, lipgloss.NewStyle().Foreground(cGreen).Bold(true).Render("🏅 unlocked "+m.newBadge))
+		}
+		rows = append(rows, confetti(m.frame+3, 34), "", m.cycleDots(), "",
+			styleMuted.Render("↵ start ")+lipgloss.NewStyle().Foreground(col).Bold(true).Render(kind)+
+				styleMuted.Render("   ·   s skip   ·   q quit"))
 	} else {
-		head = lipgloss.NewStyle().Foreground(cCyan).Bold(true).Render("☕  BREAK OVER")
-		sub = styleMuted.Render("↵ next focus   ·   q quit")
+		rows = append(rows,
+			lipgloss.NewStyle().Foreground(cCyan).Bold(true).Render("☕  BREAK OVER"), "",
+			m.cycleDots(), "", styleMuted.Render("↵ next focus   ·   q quit"))
 	}
-	return lipgloss.JoinVertical(lipgloss.Center,
-		"🍅 "+gradientText("pomo", m.frame), m.statsLine(), "", head, "", m.cycleDots(), "", sub)
+	return lipgloss.JoinVertical(lipgloss.Center, rows...)
 }
 
 func (m *Model) viewTopic() string {
@@ -465,7 +495,26 @@ func (m *Model) viewHistory() string {
 			cur, mark, styleMuted.Render(s.Started.Format("01-02 15:04")),
 			st.Render(fmt.Sprintf("%-20s", trunc(s.Topic, 20))), styleKey.Render(fmt.Sprintf("%dm", s.Duration/60))))
 	}
-	b.WriteString("\n" + keyHint("tab", "back") + keyHint("j/k", "move") + keyHint("q", "quit"))
+	// detail card for the selected session
+	if m.histCursor >= 0 && m.histCursor < len(m.history) {
+		s := m.history[m.histCursor]
+		b.WriteString("\n" + gradientRule(46) + "\n")
+		b.WriteString(styleTopic.Render(s.Topic) + styleMuted.Render(fmt.Sprintf("  ·  %dm", s.Duration/60)))
+		if s.XP > 0 {
+			b.WriteString(styleWarn.Render(fmt.Sprintf("  +%d XP", s.XP)))
+		}
+		b.WriteString("\n")
+		if len(s.Tags) > 0 {
+			b.WriteString(styleKey.Render("#"+strings.Join(s.Tags, " #")) + "\n")
+		}
+		for _, n := range s.Notes {
+			b.WriteString(styleMuted.Render("  "+n.At.Format("15:04")+"  ") + styleText.Render(n.Text) + "\n")
+		}
+		if len(s.Notes) == 0 {
+			b.WriteString(styleMuted.Render("  (no notes)") + "\n")
+		}
+	}
+	b.WriteString("\n" + keyHint("tab", "timer") + keyHint("j/k", "move") + keyHint("q", "quit"))
 	return b.String()
 }
 

@@ -96,6 +96,23 @@ func gradientRule(w int) string {
 	return b.String()
 }
 
+// confetti renders an animated sparkle row (shimmers with frame).
+func confetti(frame, width int) string {
+	glyphs := []rune("✦✧·✶✦ ·")
+	cols := []color.Color{cMagenta, cViolet, cCyan, cYellow, cGreen, cOrange}
+	var b strings.Builder
+	for i := 0; i < width; i++ {
+		g := glyphs[(i+frame)%len(glyphs)]
+		if g == ' ' {
+			b.WriteByte(' ')
+			continue
+		}
+		c := cols[(i+frame/2)%len(cols)]
+		b.WriteString(lipgloss.NewStyle().Foreground(c).Render(string(g)))
+	}
+	return b.String()
+}
+
 // keyHint renders "key desc" pairs for footers.
 func keyHint(key, desc string) string {
 	return styleKey.Render(key) + styleMuted.Render(" "+desc+"  ")
