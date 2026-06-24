@@ -126,8 +126,8 @@ func TestTUIPauseNoteDoneQuit(t *testing.T) {
 	if cmd == nil {
 		t.Error("q should return a quit cmd")
 	}
-	// View renders without panic and includes the bar
-	if out := m.View().Content; !strings.Contains(out, "pomo") {
+	// View renders without panic and includes the header logo
+	if out := m.View().Content; !strings.Contains(out, "🍅") {
 		t.Errorf("view missing header: %q", out)
 	}
 }

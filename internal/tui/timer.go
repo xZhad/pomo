@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"charm.land/bubbles/v2/progress"
@@ -43,6 +44,7 @@ type Model struct {
 	w, h        int
 	history     []model.Session
 	histCursor  int
+	frame       int // animation frame (logo shimmer)
 }
 
 func New(svc *session.Service) *Model {
@@ -88,6 +90,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *Model) onTick() tea.Cmd {
 	m.refresh()
+	m.frame++
 	var cmds []tea.Cmd
 	if m.status.Active {
 		dur := time.Duration(m.status.Session.Duration) * time.Second
@@ -213,45 +216,104 @@ func (m *Model) toTopic() {
 }
 
 func (m *Model) View() tea.View {
-	var body string
+	phase := "focus" // batch 2 wires real work/break phases
+	var inner string
+	border := cViolet
 	switch m.mode {
 	case modeTopic:
-		body = fmt.Sprintf("🍅 pomo\n\nstart a session:\n%s\n\n(enter to start · ctrl+c quit)", m.input.View())
+		inner = m.viewTopic()
 	case modeNote:
-		body = fmt.Sprintf("🍅 pomo — note\n\n%s\n\n(enter to save · esc cancel)", m.input.View())
+		inner = m.viewNote()
 	case modeHistory:
-		var b string
-		b = "🍅 pomo — history (tab back · j/k · q quit)\n\n"
-		for i, s := range m.history {
-			cur := "  "
-			if i == m.histCursor {
-				cur = "> "
-			}
-			b += fmt.Sprintf("%s%s  %-20s  %dm\n", cur, s.Started.Format("01-02 15:04"), s.Topic, s.Duration/60)
-		}
-		if len(m.history) == 0 {
-			b += "(no sessions yet)"
-		}
-		body = b
+		inner = m.viewHistory()
 	default:
-		s := m.status
-		tomato := "🍅"
-		if m.pulse < 0.5 {
-			tomato = "·🍅·"
-		}
-		mm := int(s.Remaining.Minutes())
-		ss := int(s.Remaining.Seconds()) % 60
-		state := "running"
-		if s.Paused {
-			state = "paused"
-		} else if s.Remaining <= 0 {
-			state = "done — break time"
-		}
-		body = fmt.Sprintf("%s pomo\n\n%s\n%02d:%02d  %s\n%s\n\n(p pause · n note · e +5m · d done · s stop · q quit)",
-			tomato, s.Session.Topic, mm, ss, state, m.bar.View())
+		inner = m.viewTimer(phase)
+		border = phaseColor(phase)
 	}
-	card := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(1, 3).Render(body)
-	v := tea.NewView(card)
-	v.AltScreen = true // full-screen (v2: alt-screen is a View field, not a program option)
+	card := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).BorderForeground(border).
+		Padding(1, 4).Render(inner)
+	out := card
+	if m.w > 0 && m.h > 0 {
+		out = lipgloss.Place(m.w, m.h, lipgloss.Center, lipgloss.Center, card)
+	}
+	v := tea.NewView(out)
+	v.AltScreen = true
 	return v
+}
+
+func (m *Model) viewTimer(phase string) string {
+	s := m.status
+	mm := int(s.Remaining.Minutes())
+	ss := int(s.Remaining.Seconds()) % 60
+	if mm < 0 {
+		mm, ss = 0, 0
+	}
+	clock := bigTime(fmt.Sprintf("%02d:%02d", mm, ss), phaseStops(phase)...)
+	label := lipgloss.NewStyle().Foreground(phaseColor(phase)).Bold(true).Render(phaseLabel(phase))
+	rows := []string{
+		"🍅 " + gradientText("pomo", m.frame),
+		"",
+		clock,
+		"",
+		label + styleMuted.Render("  ·  ") + styleTopic.Render(s.Session.Topic),
+		m.bar.View(),
+	}
+	if s.Paused {
+		rows = append(rows, styleWarn.Render("⏸ paused"))
+	} else if s.Remaining <= 0 {
+		rows = append(rows, styleOK.Render("✓ done — break time"))
+	}
+	rows = append(rows, "",
+		keyHint("p", "pause")+keyHint("n", "note")+keyHint("e", "+5m")+
+			keyHint("d", "done")+keyHint("s", "stop")+keyHint("tab", "stats")+keyHint("q", "quit"))
+	return lipgloss.JoinVertical(lipgloss.Center, rows...)
+}
+
+func (m *Model) viewTopic() string {
+	return lipgloss.JoinVertical(lipgloss.Center,
+		"🍅 "+gradientText("pomo", m.frame), "",
+		styleMuted.Render("what are you working on?"),
+		m.input.View(), "",
+		styleMuted.Render("enter start · ctrl+c quit"))
+}
+
+func (m *Model) viewNote() string {
+	return lipgloss.JoinVertical(lipgloss.Center,
+		"🍅 "+gradientText("pomo", m.frame)+styleMuted.Render(" · note"), "",
+		m.input.View(), "",
+		styleMuted.Render("enter save · esc cancel"))
+}
+
+func (m *Model) viewHistory() string {
+	var b strings.Builder
+	b.WriteString("🍅 " + gradientText("pomo", m.frame) + styleMuted.Render(" · history") + "\n\n")
+	if len(m.history) == 0 {
+		b.WriteString(styleMuted.Render("(no sessions yet)"))
+	}
+	for i, s := range m.history {
+		cur := "  "
+		st := styleText
+		if i == m.histCursor {
+			cur = lipgloss.NewStyle().Foreground(cMagenta).Bold(true).Render("▌ ")
+			st = styleTopic
+		}
+		mark := styleOK.Render("✓")
+		if !s.Completed {
+			mark = lipgloss.NewStyle().Foreground(cRed).Render("✗")
+		}
+		b.WriteString(fmt.Sprintf("%s%s %s  %s  %s\n",
+			cur, mark, styleMuted.Render(s.Started.Format("01-02 15:04")),
+			st.Render(fmt.Sprintf("%-20s", trunc(s.Topic, 20))), styleKey.Render(fmt.Sprintf("%dm", s.Duration/60))))
+	}
+	b.WriteString("\n" + keyHint("tab", "back") + keyHint("j/k", "move") + keyHint("q", "quit"))
+	return b.String()
+}
+
+func trunc(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n-1]) + "…"
 }
