@@ -10,6 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/harmonica"
+	"github.com/xZhad/pomo/internal/gamify"
 	"github.com/xZhad/pomo/internal/model"
 	"github.com/xZhad/pomo/internal/report"
 	"github.com/xZhad/pomo/internal/session"
@@ -329,6 +330,7 @@ func (m *Model) viewTimer(phase string) string {
 	}
 	rows := []string{
 		"🍅 " + gradientText("pomo", m.frame),
+		m.statsLine(),
 		"",
 		clock,
 		"",
@@ -347,6 +349,28 @@ func (m *Model) viewTimer(phase string) string {
 	}
 	rows = append(rows, "", hints)
 	return lipgloss.JoinVertical(lipgloss.Center, rows...)
+}
+
+// statsLine renders the gamification status: streak flame, daily-goal ring,
+// level + XP bar — derived from the session log.
+func (m *Model) statsLine() string {
+	all, _ := m.svc.Store.AllSessions()
+	now := m.svc.Now()
+	streak := gamify.Streak(all, now)
+	done := gamify.CompletedToday(all, now)
+	cfg, _ := m.svc.Store.LoadConfig()
+	goal := cfg.Goal
+	if goal <= 0 {
+		goal = 4
+	}
+	lvl, into, span := gamify.Level(gamify.TotalXP(all))
+	flame := styleMuted.Render("· no streak ·")
+	if streak > 0 {
+		flame = styleWarn.Render(fmt.Sprintf("🔥 %d", streak))
+	}
+	goalStr := goalRing(done, goal) + styleMuted.Render(fmt.Sprintf(" %d/%d", done, goal))
+	lvlStr := styleKey.Render(fmt.Sprintf("lvl %d ", lvl)) + miniBar(into, span, 8)
+	return flame + styleMuted.Render("   ") + goalStr + styleMuted.Render("   ") + lvlStr
 }
 
 // cycleDots shows progress through the current pomodoro cycle.
@@ -386,7 +410,7 @@ func (m *Model) viewAdvance() string {
 		sub = styleMuted.Render("↵ next focus   ·   q quit")
 	}
 	return lipgloss.JoinVertical(lipgloss.Center,
-		"🍅 "+gradientText("pomo", m.frame), "", head, "", m.cycleDots(), "", sub)
+		"🍅 "+gradientText("pomo", m.frame), m.statsLine(), "", head, "", m.cycleDots(), "", sub)
 }
 
 func (m *Model) viewTopic() string {

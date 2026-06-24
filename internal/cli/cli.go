@@ -180,6 +180,9 @@ func finish(out io.Writer, fn func() (model.Session, error), label string) int {
 		return 1
 	}
 	fmt.Fprintf(out, "%s: %s\n", label, sess.Topic)
+	if label == "done" && sess.XP > 0 {
+		fmt.Fprintf(out, "  +%d XP 🍅\n", sess.XP)
+	}
 	return 0
 }
 

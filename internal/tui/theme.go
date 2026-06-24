@@ -88,6 +88,45 @@ func keyHint(key, desc string) string {
 	return styleKey.Render(key) + styleMuted.Render(" "+desc+"  ")
 }
 
+// goalRing renders a single ring glyph filling with daily-goal progress
+// (yellow until met, green once the goal is reached).
+func goalRing(done, goal int) string {
+	if goal <= 0 {
+		goal = 4
+	}
+	glyphs := []string{"○", "◔", "◑", "◕", "●"}
+	i := int(float64(done) / float64(goal) * 4)
+	if i > 4 {
+		i = 4
+	}
+	col := cYellow
+	if done >= goal {
+		col = cGreen
+	}
+	return lipgloss.NewStyle().Foreground(col).Render(glyphs[i])
+}
+
+// miniBar renders a w-wide gradient progress bar (violet→magenta).
+func miniBar(v, total, w int) string {
+	if total <= 0 {
+		total = 1
+	}
+	fill := v * w / total
+	if fill > w {
+		fill = w
+	}
+	ramp := lipgloss.Blend1D(max(2, w), cViolet, cMagenta)
+	var b strings.Builder
+	for i := 0; i < w; i++ {
+		if i < fill {
+			b.WriteString(lipgloss.NewStyle().Foreground(ramp[i]).Render("▰"))
+		} else {
+			b.WriteString(styleMuted.Render("▱"))
+		}
+	}
+	return b.String()
+}
+
 // --- big block-digit clock ---------------------------------------------------
 
 // glyphs are 5 rows tall; each digit is 4 cols, ":" is 2.

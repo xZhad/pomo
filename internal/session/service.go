@@ -4,6 +4,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/xZhad/pomo/internal/gamify"
 	"github.com/xZhad/pomo/internal/model"
 	"github.com/xZhad/pomo/internal/notify"
 	"github.com/xZhad/pomo/internal/store"
@@ -186,6 +187,27 @@ func (svc *Service) finish(completed bool) (model.Session, error) {
 		return s
 	}); err != nil {
 		return model.Session{}, err
+	}
+	if completed { // award XP (streak counts this just-completed session)
+		all, err := svc.Store.AllSessions()
+		if err != nil {
+			return model.Session{}, err
+		}
+		streak := gamify.Streak(all, svc.Now())
+		var hasNote bool
+		for _, s := range all {
+			if s.ID == id {
+				hasNote = len(s.Notes) > 0
+				break
+			}
+		}
+		xp := gamify.XPFor(hasNote, streak)
+		if _, err := svc.Store.UpdateSession(id, func(s model.Session) model.Session {
+			s.XP = xp
+			return s
+		}); err != nil {
+			return model.Session{}, err
+		}
 	}
 	if err := svc.Store.ClearState(); err != nil {
 		return model.Session{}, err
