@@ -270,6 +270,10 @@ func cmdConfig(st *store.Store, args []string, out io.Writer) int {
 			cfg.WorkMin, _ = strconv.Atoi(val)
 		case "break":
 			cfg.BreakMin, _ = strconv.Atoi(val)
+		case "long_break", "longbreak", "long":
+			cfg.LongBreakMin, _ = strconv.Atoi(val)
+		case "cycle":
+			cfg.CycleLength, _ = strconv.Atoi(val)
 		case "goal":
 			cfg.Goal, _ = strconv.Atoi(val)
 		case "notify":
@@ -283,6 +287,7 @@ func cmdConfig(st *store.Store, args []string, out io.Writer) int {
 			return 1
 		}
 	}
-	fmt.Fprintf(out, "work=%d break=%d goal=%d notify=%v\n", cfg.WorkMin, cfg.BreakMin, cfg.Goal, cfg.Notify)
+	fmt.Fprintf(out, "work=%d break=%d long_break=%d cycle=%d goal=%d notify=%v\n",
+		cfg.WorkMin, cfg.BreakMin, cfg.LongBreakMin, cfg.CycleLength, cfg.Goal, cfg.Notify)
 	return 0
 }

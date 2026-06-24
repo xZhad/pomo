@@ -54,15 +54,57 @@ func (svc *Service) Start(opts StartOpts) (model.Session, error) {
 	if err := svc.Store.AppendSession(sess); err != nil {
 		return model.Session{}, err
 	}
-	st := store.State{ID: sess.ID, Started: now, Deadline: now.Add(time.Duration(sess.Duration) * time.Second)}
+	st := store.State{ID: sess.ID, Phase: "focus", Started: now, Deadline: now.Add(time.Duration(sess.Duration) * time.Second)}
 	if err := svc.Store.SaveState(st); err != nil {
 		return model.Session{}, err
 	}
 	return sess, nil
 }
 
+// StartBreak begins an ephemeral break phase (not logged as a session). long
+// picks the long-break duration; otherwise the short break.
+func (svc *Service) StartBreak(long bool) (time.Duration, error) {
+	if _, ok, err := svc.Store.LoadState(); err != nil {
+		return 0, err
+	} else if ok {
+		return 0, ErrActive
+	}
+	cfg, err := svc.Store.LoadConfig()
+	if err != nil {
+		return 0, err
+	}
+	mins, phase := cfg.BreakMin, "short"
+	if long {
+		mins, phase = cfg.LongBreakMin, "long"
+	}
+	now := svc.Now()
+	dur := time.Duration(mins) * time.Minute
+	st := store.State{Phase: phase, Started: now, Deadline: now.Add(dur)}
+	return dur, svc.Store.SaveState(st)
+}
+
+// EndBreak clears an active break (breaks are not persisted).
+func (svc *Service) EndBreak() error { return svc.Store.ClearState() }
+
+// CompletedFocusToday counts completed focus sessions started today (local).
+func (svc *Service) CompletedFocusToday() (int, error) {
+	all, err := svc.Store.AllSessions()
+	if err != nil {
+		return 0, err
+	}
+	today := svc.Now().Format("2006-01-02")
+	n := 0
+	for _, s := range all {
+		if s.Completed && s.Started.Format("2006-01-02") == today {
+			n++
+		}
+	}
+	return n, nil
+}
+
 type Status struct {
 	Active    bool
+	Phase     string // "focus" | "short" | "long"
 	Session   model.Session
 	Remaining time.Duration
 	Paused    bool
@@ -81,7 +123,14 @@ func (svc *Service) Status() (Status, error) {
 	if rem < 0 {
 		rem = 0
 	}
-	out := Status{Active: true, Remaining: rem, Paused: st.Paused}
+	phase := st.Phase
+	if phase == "" {
+		phase = "focus"
+	}
+	out := Status{Active: true, Phase: phase, Remaining: rem, Paused: st.Paused}
+	if st.ID == "" { // a break has no logged session
+		return out, nil
+	}
 	all, err := svc.Store.AllSessions()
 	if err != nil {
 		return out, err

@@ -137,3 +137,38 @@ func TestPauseResumeExtend(t *testing.T) {
 		t.Errorf("duration after extend = %d, want 1800", st.Session.Duration)
 	}
 }
+
+func TestBreakPhaseAndCycle(t *testing.T) {
+	svc := newSvc(t)
+	// start + complete a focus
+	if _, err := svc.Start(StartOpts{Topic: "x", WorkMin: 25}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Done(); err != nil {
+		t.Fatal(err)
+	}
+	n, _ := svc.CompletedFocusToday()
+	if n != 1 {
+		t.Errorf("completed today = %d, want 1", n)
+	}
+	// start a break — ephemeral, no session logged, phase set
+	if _, err := svc.StartBreak(false); err != nil {
+		t.Fatal(err)
+	}
+	stt, _ := svc.Status()
+	if !stt.Active || stt.Phase != "short" {
+		t.Errorf("break status = %+v, want active short", stt)
+	}
+	// break creates no session
+	all, _ := svc.Store.AllSessions()
+	if len(all) != 1 {
+		t.Errorf("sessions = %d, want 1 (break not logged)", len(all))
+	}
+	// end break clears state
+	if err := svc.EndBreak(); err != nil {
+		t.Fatal(err)
+	}
+	if s, _ := svc.Status(); s.Active {
+		t.Error("break should be cleared")
+	}
+}

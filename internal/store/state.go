@@ -9,6 +9,7 @@ import (
 
 type State struct {
 	ID       string    `json:"id"`
+	Phase    string    `json:"phase,omitempty"` // "focus" (default) | "short" | "long"
 	Started  time.Time `json:"started"`
 	Deadline time.Time `json:"deadline"`
 	Paused   bool      `json:"paused"`

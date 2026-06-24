@@ -7,13 +7,17 @@ import (
 )
 
 type Config struct {
-	WorkMin  int  `json:"work"`
-	BreakMin int  `json:"break"`
-	Goal     int  `json:"goal"`
-	Notify   bool `json:"notify"`
+	WorkMin      int  `json:"work"`
+	BreakMin     int  `json:"break"`       // short break
+	LongBreakMin int  `json:"long_break"`  // long break (after a full cycle)
+	CycleLength  int  `json:"cycle"`       // focuses per cycle before a long break
+	Goal         int  `json:"goal"`        // daily focus goal
+	Notify       bool `json:"notify"`
 }
 
-func DefaultConfig() Config { return Config{WorkMin: 25, BreakMin: 5, Goal: 4, Notify: true} }
+func DefaultConfig() Config {
+	return Config{WorkMin: 25, BreakMin: 5, LongBreakMin: 15, CycleLength: 4, Goal: 4, Notify: true}
+}
 
 func (s *Store) configPath() string { return filepath.Join(s.dir, "config.json") }
 

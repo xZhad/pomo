@@ -22,6 +22,7 @@ const (
 	modeTopic
 	modeNote
 	modeHistory
+	modeAdvance // between phases: focus→break or break→focus
 )
 
 type tickMsg time.Time
@@ -44,7 +45,18 @@ type Model struct {
 	w, h        int
 	history     []model.Session
 	histCursor  int
-	frame       int // animation frame (logo shimmer)
+	frame       int    // animation frame (logo shimmer)
+	advanceKind string // "break" (after focus) | "focus" (after break)
+	advanceLong bool   // next break is a long break
+}
+
+// cycleLength returns the configured focuses-per-cycle (default 4).
+func (m *Model) cycleLength() int {
+	cfg, err := m.svc.Store.LoadConfig()
+	if err != nil || cfg.CycleLength <= 0 {
+		return 4
+	}
+	return cfg.CycleLength
 }
 
 func New(svc *session.Service) *Model {
@@ -104,9 +116,22 @@ func (m *Model) onTick() tea.Cmd {
 			frac = 1
 		}
 		cmds = append(cmds, m.bar.SetPercent(frac))
-		if m.status.Remaining <= 0 && !m.notified {
-			_ = m.svc.Notifier.Notify("pomo", "Time's up — break 🍅")
+		if m.status.Remaining <= 0 && !m.notified && m.mode == modeTimer {
 			m.notified = true
+			if m.status.Phase == "focus" {
+				_ = m.svc.Notifier.Notify("pomo", "Focus complete — break time 🍅")
+				_, _ = m.svc.Done()
+				n, _ := m.svc.CompletedFocusToday()
+				cyc := m.cycleLength()
+				m.advanceLong = cyc > 0 && n%cyc == 0
+				m.advanceKind = "break"
+			} else {
+				_ = m.svc.Notifier.Notify("pomo", "Break over — back to focus 🍅")
+				_ = m.svc.EndBreak()
+				m.advanceKind = "focus"
+			}
+			m.mode = modeAdvance
+			m.refresh()
 		}
 	}
 	// breathing pulse
@@ -172,7 +197,25 @@ func (m *Model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
+	case modeAdvance:
+		switch msg.String() {
+		case "q", "ctrl+c":
+			return m, tea.Quit
+		case "enter", " ":
+			if m.advanceKind == "break" {
+				_, _ = m.svc.StartBreak(m.advanceLong)
+				m.notified = false
+				m.mode = modeTimer
+				m.refresh()
+			} else {
+				m.toTopic()
+			}
+		case "s": // skip the break / go straight to a new focus
+			m.toTopic()
+		}
+		return m, nil
 	default: // modeTimer
+		focus := m.status.Phase == "focus"
 		switch msg.String() {
 		case "q", "ctrl+c":
 			return m, tea.Quit
@@ -189,19 +232,36 @@ func (m *Model) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			}
 			m.refresh()
 		case "n":
-			m.input.SetValue("")
-			m.input.Placeholder = "note…"
-			m.mode = modeNote
-			return m, m.input.Focus()
-		case "d":
-			_, _ = m.svc.Done()
-			m.toTopic()
-		case "s":
-			_, _ = m.svc.Stop()
-			m.toTopic()
+			if focus { // notes only attach to a focus session
+				m.input.SetValue("")
+				m.input.Placeholder = "note…"
+				m.mode = modeNote
+				return m, m.input.Focus()
+			}
 		case "e":
 			_ = m.svc.Extend(5 * time.Minute)
 			m.refresh()
+		case "d": // finish this phase
+			if focus {
+				_, _ = m.svc.Done()
+				n, _ := m.svc.CompletedFocusToday()
+				cyc := m.cycleLength()
+				m.advanceLong = cyc > 0 && n%cyc == 0
+				m.advanceKind = "break"
+				m.notified = true
+				m.mode = modeAdvance
+				m.refresh()
+			} else { // end break early → next focus
+				_ = m.svc.EndBreak()
+				m.toTopic()
+			}
+		case "s": // stop/abort
+			if focus {
+				_, _ = m.svc.Stop()
+			} else {
+				_ = m.svc.EndBreak()
+			}
+			m.toTopic()
 		}
 		return m, nil
 	}
@@ -216,7 +276,10 @@ func (m *Model) toTopic() {
 }
 
 func (m *Model) View() tea.View {
-	phase := "focus" // batch 2 wires real work/break phases
+	phase := m.status.Phase
+	if phase == "" {
+		phase = "focus"
+	}
 	var inner string
 	border := cViolet
 	switch m.mode {
@@ -226,6 +289,15 @@ func (m *Model) View() tea.View {
 		inner = m.viewNote()
 	case modeHistory:
 		inner = m.viewHistory()
+	case modeAdvance:
+		inner = m.viewAdvance()
+		if m.advanceKind == "break" {
+			next := "short"
+			if m.advanceLong {
+				next = "long"
+			}
+			border = phaseColor(next)
+		}
 	default:
 		inner = m.viewTimer(phase)
 		border = phaseColor(phase)
@@ -251,23 +323,70 @@ func (m *Model) viewTimer(phase string) string {
 	}
 	clock := bigTime(fmt.Sprintf("%02d:%02d", mm, ss), phaseStops(phase)...)
 	label := lipgloss.NewStyle().Foreground(phaseColor(phase)).Bold(true).Render(phaseLabel(phase))
+	subject := styleTopic.Render(s.Session.Topic)
+	if phase != "focus" {
+		subject = styleMuted.Render("relax & recharge")
+	}
 	rows := []string{
 		"🍅 " + gradientText("pomo", m.frame),
 		"",
 		clock,
 		"",
-		label + styleMuted.Render("  ·  ") + styleTopic.Render(s.Session.Topic),
+		label + styleMuted.Render("  ·  ") + subject,
 		m.bar.View(),
+		m.cycleDots(),
 	}
 	if s.Paused {
 		rows = append(rows, styleWarn.Render("⏸ paused"))
-	} else if s.Remaining <= 0 {
-		rows = append(rows, styleOK.Render("✓ done — break time"))
 	}
-	rows = append(rows, "",
-		keyHint("p", "pause")+keyHint("n", "note")+keyHint("e", "+5m")+
-			keyHint("d", "done")+keyHint("s", "stop")+keyHint("tab", "stats")+keyHint("q", "quit"))
+	hints := keyHint("p", "pause") + keyHint("e", "+5m") + keyHint("d", "done") +
+		keyHint("s", "stop") + keyHint("tab", "stats") + keyHint("q", "quit")
+	if phase == "focus" {
+		hints = keyHint("p", "pause") + keyHint("n", "note") + keyHint("e", "+5m") +
+			keyHint("d", "done") + keyHint("s", "stop") + keyHint("tab", "stats") + keyHint("q", "quit")
+	}
+	rows = append(rows, "", hints)
 	return lipgloss.JoinVertical(lipgloss.Center, rows...)
+}
+
+// cycleDots shows progress through the current pomodoro cycle.
+func (m *Model) cycleDots() string {
+	cyc := m.cycleLength()
+	n, _ := m.svc.CompletedFocusToday()
+	pos := 0
+	if cyc > 0 {
+		pos = n % cyc
+	}
+	var b strings.Builder
+	b.WriteString(styleMuted.Render("cycle  "))
+	for i := 0; i < cyc; i++ {
+		if i < pos {
+			b.WriteString(lipgloss.NewStyle().Foreground(cMagenta).Render("● "))
+		} else {
+			b.WriteString(styleMuted.Render("○ "))
+		}
+	}
+	return b.String()
+}
+
+func (m *Model) viewAdvance() string {
+	var head, sub string
+	if m.advanceKind == "break" {
+		kind := "short break"
+		col := cCyan
+		if m.advanceLong {
+			kind, col = "long break", cGreen
+		}
+		head = styleOK.Render("✓  FOCUS COMPLETE")
+		sub = styleMuted.Render("↵ start ") +
+			lipgloss.NewStyle().Foreground(col).Bold(true).Render(kind) +
+			styleMuted.Render("   ·   s skip   ·   q quit")
+	} else {
+		head = lipgloss.NewStyle().Foreground(cCyan).Bold(true).Render("☕  BREAK OVER")
+		sub = styleMuted.Render("↵ next focus   ·   q quit")
+	}
+	return lipgloss.JoinVertical(lipgloss.Center,
+		"🍅 "+gradientText("pomo", m.frame), "", head, "", m.cycleDots(), "", sub)
 }
 
 func (m *Model) viewTopic() string {
